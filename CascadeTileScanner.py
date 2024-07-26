@@ -3,17 +3,31 @@ import time
 import tkinter as tk
 import threading
 import win32con
-import win32api
-import pywintypes
+import win32gui
+import requests
 from datetime import datetime
-
-# set to true if you're an alt tab gamer
-loadedMessage = True
 
 connectors = {
     "test": "bwah"
 }
 
+# Constants
+LOG_FILE_PATH = os.getenv('LOCALAPPDATA') + r'\Warframe\EE.log'
+API_URL = "https://api.warframestat.us/pc/"
+TILE_COLORS = ["red", "green", "cyan", "magenta"]
+
+
+# Defaults
+loadedMessage = True # set to true if you're an alt tab gamer
+default_zariman_cycle = {
+    "id": "unknown",
+    "expiry": "unknown",
+    "activation": "unknown",
+    "isCorpus": False,
+    "state": "unknown",
+    "timeLeft": "unknown",
+    "shortString": "unknown"
+}
 original_tilesets = {
     "IntHydroponics": "Dogshit (3)",
     "IntLivingQuarters": "Ramp (3)",
@@ -28,8 +42,22 @@ original_tilesets = {
     "IntParkC": "Roost (4)",
     "IntShuttleBay": "Shipyard (5)"
 }
-
 tilesets = original_tilesets.copy()
+
+def get_zariman_cycle(retry_delay=5, max_retries=5):
+    for attempt in range(max_retries):
+        try:
+            response = requests.get(API_URL)
+            response.raise_for_status()  # Raise an HTTPError for bad responses
+            return response.json().get("zarimanCycle", default_zariman_cycle)
+        except (requests.RequestException, ValueError) as e:
+            print(f"Error fetching Zariman cycle data: {e}")
+            if attempt < max_retries + 1:
+                print(f"Retrying in {retry_delay} seconds...")
+                time.sleep(retry_delay)
+    
+    print("Failed to fetch Zariman cycle data after several attempts.")
+    return default_zariman_cycle
 
 def follow(thefile):
     thefile.seek(0, 2)
@@ -46,115 +74,154 @@ class Overlay:
         self.root = tk.Tk()
         self.root.overrideredirect(True)
         self.root.attributes("-topmost", True)
-        self.root.geometry("10x10")
-        self.root.configure(bg='black')
-        self.root.attributes("-alpha", 0.5)
-        self.enable_overlay = True
-        self.label = tk.Label(self.root, text="i stole this from wally :D",
-                              fg="white", bg="black", font=('Times New Roman', 15, ''))
-        self.label.pack(fill="both", expand=True)
+        self.root.configure(bg="black")
+        self.root.attributes("-alpha", 0.5) # Transparency
 
-    def update_overlay(self, text, text_color):
-        self.label.config(text=text, fg=text_color)
-        self.root.update_idletasks()
-        width = self.label.winfo_reqwidth() + 2  # Add some padding
-        self.root.geometry(f"{width}x40")
+        # Define the labels
+        self.label_cascade = tk.Label(self.root, text="i stole this from wally :D", fg="red", bg="black", font=("Times New Roman", 15, ""))
 
-        hWindow = pywintypes.HANDLE(int(self.label.master.frame(), 16))
+        self.state_frame = tk.Frame(self.root, bg="black")
+        self.label_state_prefix = tk.Label(self.state_frame, text="State: ", fg="white", bg="black", font=("Times New Roman", 11, ""))
+        self.label_state_value = tk.Label(self.state_frame, text="", fg="white", bg="black", font=('Times New Roman', 11, ''))
+        self.label_short = tk.Label(self.state_frame, text="", fg="white", bg="black", font=('Times New Roman', 11, ''))
+
+        # Grid configuration
+        self.label_cascade.grid(row=0, column=0, columnspan=2, padx=10, pady=5, sticky="w")
+
+        self.state_frame.grid(row=1, column=0, columnspan=2, padx=10, pady=0, sticky="w")
+        self.label_state_prefix.grid(row=0, column=0, padx=0, pady=0, sticky="w")
+        self.label_state_value.grid(row=0, column=1, padx=(0, 5), pady=0, sticky="w")
+        self.label_short.grid(row=0, column=2, padx=2, pady=0, sticky="w")
+
+        # Configure grid to expand with content
+        self.root.grid_rowconfigure(0, weight=0)
+        self.root.grid_rowconfigure(1, weight=1)
+        self.root.grid_rowconfigure(2, weight=0)
+        self.root.grid_columnconfigure(0, weight=1)
+        self.root.grid_columnconfigure(1, weight=1)
+        self.root.grid_columnconfigure(2, weight=0)
+        
+        self.root.update_idletasks() # Making sure overlay is fully initialized
+        self.make_clickthrough()
+
+    def make_clickthrough(self):
+        # Obtain the window handle
+        hwnd = win32gui.GetParent(self.root.winfo_id())
+        style = win32gui.GetWindowLong(hwnd, win32con.GWL_EXSTYLE)
+        
         # http://msdn.microsoft.com/en-us/library/windows/desktop/ff700543(v=vs.85).aspx
         # The WS_EX_TRANSPARENT flag makes events (like mouse clicks) fall through the window.
-        exStyle = win32con.WS_EX_COMPOSITED | win32con.WS_EX_LAYERED | win32con.WS_EX_NOACTIVATE | win32con.WS_EX_TOPMOST | win32con.WS_EX_TRANSPARENT
-        win32api.SetWindowLong(hWindow, win32con.GWL_EXSTYLE, exStyle)
+        exStyle = style | win32con.WS_EX_LAYERED | win32con.WS_EX_TRANSPARENT | win32con.WS_EX_NOACTIVATE | win32con.WS_EX_TOPMOST
+        win32gui.SetWindowLong(hwnd, win32con.GWL_EXSTYLE, exStyle)
+        
+        # Apply the new window style
+        win32gui.SetWindowPos(hwnd, win32con.HWND_TOPMOST, 0, 0, 0, 0, win32con.SWP_NOSIZE | win32con.SWP_NOMOVE | win32con.SWP_NOACTIVATE | win32con.SWP_NOREDRAW)
+    
+    def update_cascade_label(self, text, text_color):
+        self.label_cascade.config(text=text, fg=text_color)
+        self.root.update_idletasks()
+        
+    def update_zariman_cycle(self):
+        zariman_cycle = get_zariman_cycle()
+        time_left = zariman_cycle["timeLeft"]
+        state = zariman_cycle["state"]
+        short_string = zariman_cycle["shortString"]
+        state_color = "cyan" if state == "corpus" else "red"
+        
+        # API endpoint can sometimes take up to 5m to update Zariman faction state for some reason :P
+        if '-' in time_left:
+            if 'm' in time_left:
+                minutes = int(time_left.split('m')[0])
+            else:
+                minutes = 0  # No minutes part, just handle as 0
+            remaining_minutes = 30 + minutes
+            short_string = f"2h {remaining_minutes}m to " + ("corpus" if state == "grineer" else "grineer")
+            state = "corpus" if state == "grineer" else "grineer"
+            self.label_state_value.config(text=state.capitalize(), fg=state_color)
+            self.label_short.config(text=short_string)    
+        
+        self.label_state_value.config(text=state.capitalize(), fg=state_color)
+        self.label_short.config(text=short_string)
 
     def run(self):
         threading.Thread(target=self.track_tiles).start()
-        self.update_overlay("Awaiting Cascade...", "red")
+        threading.Thread(target=self.periodic_update).start()
+        
+        self.update_cascade_label("Awaiting Cascade...", "red")
         self.root.mainloop()
+
+    def periodic_update(self):
+        while True:
+            self.update_zariman_cycle()
+            time.sleep(30) # API endpoint seems to update about once every 2m
 
     def track_tiles(self):
         global loadedMessage, tilesets
-        path = os.getenv('LOCALAPPDATA') + r'\Warframe\EE.log'
-        logfile = open(path, encoding="utf8", errors="ignore")
-        loglines = follow(logfile)
-        searching = False
-        tiles = ""
-        exocount = 0
-        tilecount = 0
-        buffer = ""
-        attempts = 0
-        
-        for line in loglines:
-            now = datetime.now()
-            milliseconds = now.microsecond // 1000
-            timestamp = now.strftime(f'%H:%M:%S.{milliseconds:03d}')
+        with open(LOG_FILE_PATH, encoding="utf8", errors="ignore") as logfile:
+            loglines = follow(logfile)
+            searching = False
+            tiles = ""
+            exocount = 0
+            tilecount = 0
+            buffer = ""
+            attempts = 0
             
-            if not line:
-                continue
-            
-            buffer += line
-            
-            # Check if the buffer contains a new line character, which should be the end of a line
-            if "\n" in buffer:
-                lines = buffer.split("\n")
-                buffer = lines.pop()
+            for line in loglines:
+                now = datetime.now()
+                milliseconds = now.microsecond // 1000
+                timestamp = now.strftime(f'%H:%M:%S.{milliseconds:03d}')
                 
-                for line in lines:
-                    if loadedMessage:
-                        if "Play()" in line and "Layer255" in line and not "LotusCinematic" in line:
-                            if exocount <= 10:
-                                self.update_overlay(tiles, "red")
-                            elif exocount == 11:
-                                self.update_overlay(tiles, "green")
-                            elif exocount == 12:
-                                self.update_overlay(tiles, "cyan")
-                            elif exocount == 13:
-                                self.update_overlay(tiles, "magenta")
-                            
-                            tiles = ""
-                            exocount = 0
+                if not line:
+                    continue
+                
+                buffer += line
+                
+                # Check if the buffer contains a new line character, which should be the end of a line
+                if "\n" in buffer:
+                    lines = buffer.split("\n")
+                    buffer = lines.pop()
+                    
+                    for line in lines:
+                        if loadedMessage:
+                            if "Play()" in line and "Layer255" in line and not "LotusCinematic" in line:
+                                self.update_cascade_label(tiles, TILE_COLORS[max(0, (exocount - 10))])
+                                tiles = ""
+                                exocount = 0
 
-                    if "/Lotus/Levels/Proc/Zariman/ZarimanDirectionalSurvival generating layout" in line:
-                        searching = True
-                        attempts += 1
-                        print(f"[Attempt {attempts}]")
-                        
-                    if not searching and ("/Lotus/Levels/Proc/TheNewWar/PartTwo/TNWDrifterCampMain" in line or "/Lotus/Levels/Proc/PlayerShip" in line):
-                        self.update_overlay("Awaiting Cascade...", "red")
-                        
-                    if "TacticalAreaMap::AddZone /Lotus/Levels/Zariman/" in line:
-                        for key in sorted(tilesets.keys(), key=len, reverse=True):
-                            if key in line:
-                                tilecount += 1
-                                
-                                if tilecount < 3:
-                                    tiles = tiles + tilesets.get(key) + " -> "
-                                if tilecount == 3:
-                                    tiles = tiles + tilesets.get(key)
+                        if "/Lotus/Levels/Proc/Zariman/ZarimanDirectionalSurvival generating layout" in line:
+                            searching = True
+                            attempts += 1
+                            print(f"[Attempt {attempts}]")
+                            
+                        if not searching and ("/Lotus/Levels/Proc/TheNewWar/PartTwo/TNWDrifterCampMain" in line or "/Lotus/Levels/Proc/PlayerShip" in line):
+                            self.update_cascade_label("Awaiting Cascade...", "red")
+                            
+                        if "TacticalAreaMap::AddZone /Lotus/Levels/Zariman/" in line:
+                            for key in sorted(tilesets.keys(), key=len, reverse=True):
+                                if key in line:
+                                    tilecount += 1
                                     
-                                exocount += int(tilesets.get(key).split("(")[1][0])
+                                    if tilecount < 3:
+                                        tiles = tiles + tilesets.get(key) + " -> "
+                                    if tilecount == 3:
+                                        tiles = tiles + tilesets.get(key)
+                                        
+                                    exocount += int(tilesets.get(key).split("(")[1][0])
+                                    
+                                    print(f"[{timestamp}] - Key: {key!r} | Tile: {tilesets[key]!r} | Tile #{tilecount!r} \n{line!r}")
+                                    
+                                    del tilesets[key]  # Remove the found tile
+                                    break     
+                        elif searching and "ResourceLoader" in line:
+                            self.update_cascade_label(tiles, TILE_COLORS[max(0, (exocount - 10))])
                                 
-                                print(f"[{timestamp}] - Key: {key!r} | Tile: {tilesets[key]!r} | Tile #{tilecount!r} \n{line!r}")
-                                
-                                del tilesets[key]  # Remove the found tile
-                                break
+                            searching = False
+                            tilecount = 0
                             
-                    elif searching and "ResourceLoader" in line:
-                        if exocount <= 10:
-                            self.update_overlay(tiles, "red")
-                        elif exocount == 11:
-                            self.update_overlay(tiles, "green")
-                        elif exocount == 12:
-                            self.update_overlay(tiles, "cyan")
-                        elif exocount == 13:
-                            self.update_overlay(tiles, "magenta")
-                            
-                        searching = False
-                        tilecount = 0
-                        
-                        if not loadedMessage:
-                            tiles = ""
-                            exocount = 0
-                        tilesets = original_tilesets.copy()
+                            if not loadedMessage:
+                                tiles = ""
+                                exocount = 0
+                            tilesets = original_tilesets.copy() # Reset the tilesets after 3 tiles found
                     
 if __name__ == '__main__':
     overlay = Overlay()

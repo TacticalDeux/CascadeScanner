@@ -4,4 +4,4 @@ build
 out
 *.exe
 _internal
-Test
+Test*
