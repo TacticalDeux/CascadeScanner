@@ -16,14 +16,17 @@ LOG_FILE_PATH = os.getenv('LOCALAPPDATA') + r'\Warframe\EE.log'
 API_URL = "https://api.warframestat.us/pc/"
 TILE_COLORS = ["red", "green", "cyan", "magenta"]
 
-
 # Defaults
 loadedMessage = True # set to true if you're an alt tab gamer
+default_fissures = {
+    "active": False,
+    "node": "unknown",
+    "missionType": "unknown",
+    "expired": False,
+    "eta": "unkown",
+    "isHard": False
+}
 default_zariman_cycle = {
-    "id": "unknown",
-    "expiry": "unknown",
-    "activation": "unknown",
-    "isCorpus": False,
     "state": "unknown",
     "timeLeft": "unknown",
     "shortString": "unknown"
@@ -43,6 +46,21 @@ original_tilesets = {
     "IntShuttleBay": "Shipyard (5)"
 }
 tilesets = original_tilesets.copy()
+
+def get_fissure_state(retry_delay=5, max_retries=5):
+    for attempt in range(max_retries):
+        try:
+            response = requests.get(API_URL)
+            response.raise_for_status()
+            return response.json().get("fissures", default_fissures)
+        except (requests.RequestException, ValueError) as e:
+            print(f"Error fetching fissures data: {e}")
+            if attempt < max_retries + 1:
+                print(f"Rtrying in {retry_delay} seconds...")
+                time.sleep(retry_delay)
+                
+    print("Failed to fetch fissure data after several attempts.")
+    return default_fissures
 
 def get_zariman_cycle(retry_delay=5, max_retries=5):
     for attempt in range(max_retries):
@@ -78,28 +96,44 @@ class Overlay:
         self.root.attributes("-alpha", 0.5) # Transparency
 
         # Define the labels
+        # Tiles
         self.label_cascade = tk.Label(self.root, text="i stole this from wally :D", fg="red", bg="black", font=("Times New Roman", 15, ""))
 
+        # Faction State
         self.state_frame = tk.Frame(self.root, bg="black")
-        self.label_state_prefix = tk.Label(self.state_frame, text="State: ", fg="white", bg="black", font=("Times New Roman", 11, ""))
-        self.label_state_value = tk.Label(self.state_frame, text="", fg="white", bg="black", font=('Times New Roman', 11, ''))
-        self.label_short = tk.Label(self.state_frame, text="", fg="white", bg="black", font=('Times New Roman', 11, ''))
+        self.label_state_prefix = tk.Label(self.state_frame, text="State: ", fg="white", bg="black", font=("Times New Roman", 10, ""))
+        self.label_state_value = tk.Label(self.state_frame, text="", fg="white", bg="black", font=("Times New Roman", 10, ""))
+        self.label_short = tk.Label(self.state_frame, text="", fg="white", bg="black", font=("Times New Roman", 10, ""))
+        
+        # Fissure
+        self.fissure_frame = tk.Frame(self.root, bg="black")
+        self.label_fissure_state = tk.Label(self.fissure_frame, text="", fg="white", bg="black", font=("Times New Roman", 10, ""))
+        self.label_fissure_eta = tk.Label(self.fissure_frame, text="", fg="white", bg="black", font=("Times New Roman", 10, "")) 
 
         # Grid configuration
+        # Tiles
         self.label_cascade.grid(row=0, column=0, columnspan=2, padx=10, pady=5, sticky="w")
 
+        # Faction State
         self.state_frame.grid(row=1, column=0, columnspan=2, padx=10, pady=0, sticky="w")
         self.label_state_prefix.grid(row=0, column=0, padx=0, pady=0, sticky="w")
-        self.label_state_value.grid(row=0, column=1, padx=(0, 5), pady=0, sticky="w")
+        self.label_state_value.grid(row=0, column=1, padx=0, pady=0, sticky="w")
         self.label_short.grid(row=0, column=2, padx=2, pady=0, sticky="w")
+        
+        # Fissure
+        self.fissure_frame.grid(row=2, column=0, columnspan=2, padx=10, pady=0, sticky="w")
+        self.label_fissure_state.grid(row=0, column=0, padx=0, pady=0, sticky="w")
+        self.label_fissure_eta.grid(row=0, column=1, padx=0, pady=0, sticky="w")
 
         # Configure grid to expand with content
         self.root.grid_rowconfigure(0, weight=0)
         self.root.grid_rowconfigure(1, weight=1)
-        self.root.grid_rowconfigure(2, weight=0)
+        self.root.grid_rowconfigure(2, weight=1)
         self.root.grid_columnconfigure(0, weight=1)
         self.root.grid_columnconfigure(1, weight=1)
-        self.root.grid_columnconfigure(2, weight=0)
+        self.root.grid_columnconfigure(2, weight=1)
+        
+        self.fissure_frame.grid_forget() # Immediately hide the fissure frame since it will show if there's any fissures active
         
         self.root.update_idletasks() # Making sure overlay is fully initialized
         self.make_clickthrough()
@@ -120,6 +154,27 @@ class Overlay:
     def update_cascade_label(self, text, text_color):
         self.label_cascade.config(text=text, fg=text_color)
         self.root.update_idletasks()
+    
+    def update_fissure_data(self):
+        fissure_data = get_fissure_state()
+        show_fissure_frame = False
+        
+        for sol_node in fissure_data:
+            node = sol_node["node"]
+            expired = sol_node["expired"]
+            eta = sol_node["eta"]
+            is_steel_path = sol_node["isHard"]
+            # mission_type = fissure_data["missionType"] # Maybe some day this will be useful? :Prayge: DE
+
+            if ("Tuvul Commons" in node) and (is_steel_path == True) and (expired != True):
+                self.label_fissure_state.config(text="Omnia Fissure", fg="gold")
+                self.label_fissure_eta.config(text=f"expires in {eta}")
+                show_fissure_frame = True
+
+        if show_fissure_frame:
+            self.fissure_frame.grid()
+        else:
+            self.fissure_frame.grid_forget()
         
     def update_zariman_cycle(self):
         zariman_cycle = get_zariman_cycle()
@@ -152,6 +207,7 @@ class Overlay:
 
     def periodic_update(self):
         while True:
+            self.update_fissure_data()
             self.update_zariman_cycle()
             time.sleep(30) # API endpoint seems to update about once every 2m
 
