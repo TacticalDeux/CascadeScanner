@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 import tkinter as tk
 import threading
@@ -15,6 +16,7 @@ connectors = {
 LOG_FILE_PATH = os.getenv('LOCALAPPDATA') + r'\Warframe\EE.log'
 API_URL = "https://api.warframestat.us/pc/"
 TILE_COLORS = ["red", "green", "cyan", "magenta"]
+ARROW_CHARACTER = "→" if sys.getdefaultencoding() in {"utf-8", "utf-16"} else "->"
 
 # Defaults
 loadedMessage = True # set to true if you're an alt tab gamer
@@ -119,17 +121,17 @@ class Overlay:
         self.label_state_prefix.grid(row=0, column=0, padx=0, pady=0, sticky="w")
         self.label_state_value.grid(row=0, column=1, padx=0, pady=0, sticky="w")
         self.label_short.grid(row=0, column=2, padx=2, pady=0, sticky="w")
-        
+         
         # Fissure
         self.fissure_frame.grid(row=2, column=0, columnspan=2, padx=10, pady=0, sticky="w")
-        self.label_fissure_state.grid(row=0, column=0, padx=0, pady=0, sticky="w")
-        self.label_fissure_eta.grid(row=0, column=1, padx=0, pady=0, sticky="w")
+        self.label_fissure_state.grid(row=0, column=0, padx=(10, 0), pady=0, sticky="w")
+        self.label_fissure_eta.grid(row=0, column=1, padx=(0, 5), pady=0, sticky="w")         
 
         # Configure grid to expand with content
         self.root.grid_rowconfigure(0, weight=0)
         self.root.grid_rowconfigure(1, weight=1)
         self.root.grid_rowconfigure(2, weight=1)
-        self.root.grid_columnconfigure(0, weight=1)
+        self.root.grid_columnconfigure(0, weight=0)
         self.root.grid_columnconfigure(1, weight=1)
         self.root.grid_columnconfigure(2, weight=1)
         
@@ -258,7 +260,7 @@ class Overlay:
                                     tilecount += 1
                                     
                                     if tilecount < 3:
-                                        tiles = tiles + tilesets.get(key) + " -> "
+                                        tiles = tiles + tilesets.get(key) + f" {ARROW_CHARACTER} "
                                     if tilecount == 3:
                                         tiles = tiles + tilesets.get(key)
                                         
