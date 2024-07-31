@@ -13,26 +13,13 @@ connectors = {
 }
 
 # Constants
-LOG_FILE_PATH = os.getenv('LOCALAPPDATA') + r'\Warframe\EE.log'
+LOG_FILE_PATH = os.getenv("LOCALAPPDATA") + r"\Warframe\EE.log"
 API_URL = "https://api.warframestat.us/pc/"
 TILE_COLORS = ["red", "green", "cyan", "magenta"]
 ARROW_CHARACTER = "→" if sys.getdefaultencoding() in {"utf-8", "utf-16"} else "->"
 
 # Defaults
 loadedMessage = True # set to true if you're an alt tab gamer
-default_fissures = {
-    "active": False,
-    "node": "unknown",
-    "missionType": "unknown",
-    "expired": False,
-    "eta": "unkown",
-    "isHard": False
-}
-default_zariman_cycle = {
-    "state": "unknown",
-    "timeLeft": "unknown",
-    "shortString": "unknown"
-}
 original_tilesets = {
     "IntHydroponics": "Dogshit (3)",
     "IntLivingQuarters": "Ramp (3)",
@@ -48,36 +35,6 @@ original_tilesets = {
     "IntShuttleBay": "Shipyard (5)"
 }
 tilesets = original_tilesets.copy()
-
-def get_fissure_state(retry_delay=5, max_retries=5):
-    for attempt in range(max_retries):
-        try:
-            response = requests.get(API_URL)
-            response.raise_for_status()
-            return response.json().get("fissures", default_fissures)
-        except (requests.RequestException, ValueError) as e:
-            print(f"Error fetching fissures data: {e}")
-            if attempt < max_retries + 1:
-                print(f"Rtrying in {retry_delay} seconds...")
-                time.sleep(retry_delay)
-                
-    print("Failed to fetch fissure data after several attempts.")
-    return default_fissures
-
-def get_zariman_cycle(retry_delay=5, max_retries=5):
-    for attempt in range(max_retries):
-        try:
-            response = requests.get(API_URL)
-            response.raise_for_status()  # Raise an HTTPError for bad responses
-            return response.json().get("zarimanCycle", default_zariman_cycle)
-        except (requests.RequestException, ValueError) as e:
-            print(f"Error fetching Zariman cycle data: {e}")
-            if attempt < max_retries + 1:
-                print(f"Retrying in {retry_delay} seconds...")
-                time.sleep(retry_delay)
-    
-    print("Failed to fetch Zariman cycle data after several attempts.")
-    return default_zariman_cycle
 
 def follow(thefile):
     thefile.seek(0, 2)
@@ -96,7 +53,8 @@ class Overlay:
         self.root.attributes("-topmost", True)
         self.root.configure(bg="black")
         self.root.attributes("-alpha", 0.5) # Transparency
-
+        self.api_data_cache = {}
+        
         # Define the labels
         # Tiles
         self.label_cascade = tk.Label(self.root, text="i stole this from wally :D", fg="red", bg="black", font=("Times New Roman", 15, ""))
@@ -157,49 +115,79 @@ class Overlay:
         self.label_cascade.config(text=text, fg=text_color)
         self.root.update_idletasks()
     
-    def update_fissure_data(self):
-        fissure_data = get_fissure_state()
-        show_fissure_frame = False
+    def get_api_data(self, endpoint, retry_delay=5, max_retries=5):
+        now = datetime.now()
+        milliseconds = now.microsecond // 1000
+        timestamp = now.strftime(f'%H:%M:%S.{milliseconds:03d}')
         
-        for sol_node in fissure_data:
-            node = sol_node["node"]
-            expired = sol_node["expired"]
-            eta = sol_node["eta"]
-            is_steel_path = sol_node["isHard"]
-            # mission_type = fissure_data["missionType"] # Maybe some day this will be useful? :Prayge: DE
+        for attempt in range(max_retries):
+            try:
+                response = requests.get(f"{API_URL}{endpoint}")
+                response.raise_for_status()
+                new_data = response.json()
 
-            if ("Tuvul Commons" in node) and (is_steel_path == True) and (expired != True):
-                self.label_fissure_state.config(text="Omnia Fissure", fg="gold")
-                self.label_fissure_eta.config(text=f"expires in {eta}")
-                show_fissure_frame = True
+                if self.api_data_cache.get(endpoint) != new_data:
+                    self.api_data_cache[endpoint] = new_data
+                    print(f"[{timestamp}] - (API) Updated {endpoint} data")
+                    return new_data
+                else:
+                    return self.api_data_cache.get(endpoint)
+                
+            except Exception as e:
+                print(f"[{timestamp}] - Error fetching {endpoint} data: {e}")
+                if attempt < max_retries + 1:
+                    print(f"Retrying in {retry_delay} seconds...")
+                    time.sleep(retry_delay)
+                    
+        print(f"[{timestamp}] - Failed to fetch fissure data after several attempts.")
 
-        if show_fissure_frame:
-            self.fissure_frame.grid()
-        else:
-            self.fissure_frame.grid_forget()
-        
     def update_zariman_cycle(self):
-        zariman_cycle = get_zariman_cycle()
-        time_left = zariman_cycle["timeLeft"]
-        state = zariman_cycle["state"]
-        short_string = zariman_cycle["shortString"]
-        state_color = "cyan" if state == "corpus" else "red"
+        cycle_data = self.get_api_data("zarimanCycle")
         
-        # API endpoint can sometimes take up to 5m to update Zariman faction state for some reason :P
-        if '-' in time_left:
-            if 'm' in time_left:
-                minutes = int(time_left.split('m')[0])
-            else:
-                minutes = 0  # No minutes part, just handle as 0
-            remaining_minutes = 30 + minutes
-            short_string = f"2h {remaining_minutes}m to " + ("corpus" if state == "grineer" else "grineer")
-            state = "corpus" if state == "grineer" else "grineer"
-            self.label_state_value.config(text=state.capitalize(), fg=state_color)
-            self.label_short.config(text=short_string)    
-        
-        self.label_state_value.config(text=state.capitalize(), fg=state_color)
-        self.label_short.config(text=short_string)
+        if cycle_data:
+            time_left = cycle_data["timeLeft"]
+            state = cycle_data["state"]
+            short_string = cycle_data["shortString"]
+            state_color = "cyan" if state == "corpus" else "red"
+            
+            # API endpoint can sometimes take up to 5m to update Zariman faction state for some reason :P
+            if '-' in time_left:
+                if 'm' in time_left:
+                    minutes = int(time_left.split('m')[0])
+                else:
+                    minutes = 0  # No minutes part, just handle as 0
 
+                remaining_minutes = 30 + minutes
+                short_string = f"2h {remaining_minutes}m to " + ("corpus" if state == "grineer" else "grineer")
+                state = "corpus" if state == "grineer" else "grineer"
+                self.label_state_value.config(text=state.capitalize(), fg=state_color)
+                self.label_short.config(text=short_string)    
+            
+            self.label_state_value.config(text=state.capitalize(), fg=state_color)
+            self.label_short.config(text=short_string)
+    
+    def update_fissure_data(self):
+        fissure_data = self.get_api_data("fissures")
+        show_frame = False
+        
+        if fissure_data:
+            for sol_node in fissure_data:
+                node = sol_node["node"]
+                expired = sol_node["expired"]
+                eta = sol_node["eta"]
+                is_steel_path = sol_node["isHard"]
+                # mission_type = fissure_data["missionType"] # Maybe some day this will be useful? :Prayge: DE
+
+                if ("Tuvul Commons" in node) and is_steel_path and not expired:
+                    self.label_fissure_state.config(text="Omnia Fissure", fg="gold")
+                    self.label_fissure_eta.config(text=f"expires in {eta}")
+                    show_frame = True
+
+            if show_frame:
+                self.fissure_frame.grid()
+            else:
+                self.fissure_frame.grid_forget()
+        
     def run(self):
         threading.Thread(target=self.track_tiles).start()
         threading.Thread(target=self.periodic_update).start()
@@ -209,8 +197,8 @@ class Overlay:
 
     def periodic_update(self):
         while True:
-            self.update_fissure_data()
             self.update_zariman_cycle()
+            self.update_fissure_data()
             time.sleep(30) # API endpoint seems to update about once every 2m
 
     def track_tiles(self):
@@ -266,7 +254,7 @@ class Overlay:
                                         
                                     exocount += int(tilesets.get(key).split("(")[1][0])
                                     
-                                    print(f"[{timestamp}] - Key: {key!r} | Tile: {tilesets[key]!r} | Tile #{tilecount!r} \n{line!r}")
+                                    print(f"[{timestamp}] - (Game) Key: {key!r} | Tile: {tilesets[key]!r} | Tile #{tilecount!r} \n{line!r}")
                                     
                                     del tilesets[key]  # Remove the found tile
                                     break     

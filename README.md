@@ -3,7 +3,7 @@ This is a simple script to help you figure out exactly what tiles you have upon 
 Simply launch the script and the overlay will appear to the top left, with red text reading "Awaiting Cascade..." and the current Zariman faction cycle.  
 When loading in to a mission, it will display the 3 main rooms in the map, along with how many exolizers will spawn in that room.    
 Depending on the total amount of exolizers, the color of the HUD will change.  
-![image](https://github.com/user-attachments/assets/d8120ae6-57af-41bb-b866-b54414277dfa)  
+![image](https://github.com/user-attachments/assets/91a5d367-398e-4fd3-b5d5-f6a9ea9712ea)  
 10 or less Exolizers = Red  
 11 Exolizers = Green  
 12 Exolizers = Cyan  
