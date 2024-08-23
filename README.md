@@ -14,13 +14,15 @@ Additionally, if a Void Fissure appears on SP Void Cascade it will show a label 
 
 
 ### Installation
-Download EXE from [releases]() or clone this repository and run it yourself through Python.
+Download and extract ZIP from [releases](https://github.com/TacticalDeux/CascadeScanner/releases/tag/v2) or clone this repository and run it yourself through Python.
 
 ### Compiling / Running it yourself
 if this doesn't work, feel free to ask about it
-1. Install python
-2. Open up the folder in a terminal
-3. Run `pip install -r requirements.txt`
-4. Run `py CascadeTileScanner.py` to launch it  
+1. Install [Python](https://www.python.org/downloads/) (Add it to the PATH when prompted to)
+2. Download this repository (press "<> Code", Download ZIP) and extract the files.   
+or `git clone https://github.com/TacticalDeux/CascadeScanner.git`
+3. Open up the folder in your terminal (right click inside your folder -> "Open in Terminal")
+4. Run `pip install -r requirements.txt`
+5. Run `py CascadeTileScanner.py` to launch it  
    or run `pip install pyinstaller` then `pyinstaller CascadeTileScanner.py` to compile the script to an EXE.  
    The compiled .exe should be inside the `dist` folder
