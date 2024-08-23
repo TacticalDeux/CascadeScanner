@@ -242,7 +242,7 @@ class Overlay:
                         if not searching and ("/Lotus/Levels/Proc/TheNewWar/PartTwo/TNWDrifterCampMain" in line or "/Lotus/Levels/Proc/PlayerShip" in line):
                             self.update_cascade_label("Awaiting Cascade...", "red")
                             
-                        if "TacticalAreaMap::AddZone /Lotus/Levels/Zariman/" in line:
+                        if "Added streaming layer /Lotus/Levels/Zariman/" in line:
                             for key in sorted(tilesets.keys(), key=len, reverse=True):
                                 if key in line:
                                     tilecount += 1
