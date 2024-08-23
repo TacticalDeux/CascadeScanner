@@ -53,7 +53,6 @@ class Overlay:
         self.root.attributes("-topmost", True)
         self.root.configure(bg="black")
         self.root.attributes("-alpha", 0.5) # Transparency
-        self.api_data_cache = {}
         
         # Define the labels
         # Tiles
@@ -124,15 +123,9 @@ class Overlay:
             try:
                 response = requests.get(f"{API_URL}{endpoint}")
                 response.raise_for_status()
-                new_data = response.json()
+                data = response.json()
 
-                if self.api_data_cache.get(endpoint) != new_data:
-                    self.api_data_cache[endpoint] = new_data
-                    print(f"[{timestamp}] - (API) Updated {endpoint} data")
-                    return new_data
-                else:
-                    return self.api_data_cache.get(endpoint)
-                
+                return data 
             except Exception as e:
                 print(f"[{timestamp}] - Error fetching {endpoint} data: {e}")
                 if attempt < max_retries + 1:
@@ -258,6 +251,7 @@ class Overlay:
                                     
                                     del tilesets[key]  # Remove the found tile
                                     break     
+
                         elif searching and "ResourceLoader" in line:
                             self.update_cascade_label(tiles, TILE_COLORS[max(0, (exocount - 10))])
                                 
